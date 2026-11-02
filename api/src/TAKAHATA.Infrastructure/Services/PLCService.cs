@@ -10,6 +10,9 @@ namespace TAKAHATA.Infrastructure.Services
 {
     public class PLCService : IPLCService
     {
+        private const int DailyCutoverBitOffset = 49;
+        private const int ModbusCoilAddressOffset = 8192;
+
         private readonly ILogger<PLCService> _logger;
         private readonly IPLCSettingsService _settingsService;
 
@@ -331,6 +334,58 @@ namespace TAKAHATA.Infrastructure.Services
                     "{Method}: Failed to write process status for machine {MachineCode}",
                     nameof(WriteProcessStatus),
                     machine.Code);
+                return Task.FromResult(PLCResult<WriteResult>.Fail(ex));
+            }
+            finally
+            {
+                if (modbusClient.Connected)
+                    modbusClient.Disconnect();
+            }
+        }
+
+        public Task<PLCResult<WriteResult>> WriteDailyCutoverRequestBit(
+            int statusBitAddress,
+            bool isPending)
+        {
+            if (statusBitAddress <= 0)
+            {
+                var error = new ArgumentOutOfRangeException(
+                    nameof(statusBitAddress),
+                    statusBitAddress,
+                    "Status bit address must be positive.");
+                _logger.LogError(error, "Cannot map invalid status bit address to a PLC coil.");
+                return Task.FromResult(PLCResult<WriteResult>.Fail(error));
+            }
+
+            var coilAddress = statusBitAddress +
+                DailyCutoverBitOffset +
+                ModbusCoilAddressOffset;
+            _logger.LogInformation(
+                "{Method}: Writing daily cutover request bit {Value} to coil {CoilAddress} " +
+                "for status register {StatusBitAddress}",
+                nameof(WriteDailyCutoverRequestBit),
+                isPending,
+                coilAddress,
+                statusBitAddress);
+
+            var modbusClient = new ModbusClient(
+                _settingsService.GetIpAddress(),
+                _settingsService.GetPort());
+
+            try
+            {
+                modbusClient.Connect();
+                modbusClient.WriteSingleCoil(coilAddress, isPending);
+                return Task.FromResult(
+                    PLCResult<WriteResult>.Success(new WriteResult()));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "{Method}: Failed to write daily cutover request bit to coil {CoilAddress}",
+                    nameof(WriteDailyCutoverRequestBit),
+                    coilAddress);
                 return Task.FromResult(PLCResult<WriteResult>.Fail(ex));
             }
             finally

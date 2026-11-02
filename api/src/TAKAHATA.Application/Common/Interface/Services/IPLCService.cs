@@ -14,6 +14,9 @@ namespace TAKAHATA.Application.Common.Interface.Services
             int processId);
         Task<PLCResult<WriteResult>> WriteMachineStatus(Machine machine, int status);
         Task<PLCResult<WriteResult>> WriteProcessStatus(Machine machine, int status);
+        Task<PLCResult<WriteResult>> WriteDailyCutoverRequestBit(
+            int statusBitAddress,
+            bool isPending);
         Task<PLCResult<ReadResult>> ReadMachineData(Machine machine);
         Task<PLCResult<List<ReadResult>>> ReadMachinesData(List<Machine> machines);
         Task<PLCResult<WriteResult>> WriteMachineData(

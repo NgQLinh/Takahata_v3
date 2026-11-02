@@ -7,6 +7,8 @@ namespace TAKAHATA.Application.Services
 {
     public class DailyJob
     {
+        private static readonly TimeSpan CutoverCommandInterval = TimeSpan.FromSeconds(5);
+
         private readonly ILogger<DailyJob> _logger;
         private readonly IPartProcessRepository _partProcessRepository;
         private readonly IMachineRepository _machineRepository;
@@ -112,6 +114,7 @@ namespace TAKAHATA.Application.Services
             }
 
             var failures = new List<Exception>();
+            var hasAttemptedCutoverCommand = false;
 
             foreach (var machine in machines)
             {
@@ -160,11 +163,52 @@ namespace TAKAHATA.Application.Services
                     continue;
                 }
 
+                if (hasAttemptedCutoverCommand)
+                {
+                    _logger.LogInformation(
+                        "Chờ {DelaySeconds} giây trước khi gửi lệnh chốt thời gian cho máy {MachineCode}.",
+                        CutoverCommandInterval.TotalSeconds,
+                        machine.Code);
+                    await Task.Delay(CutoverCommandInterval);
+                }
+
+                hasAttemptedCutoverCommand = true;
+                var bitResult = await _plcService.WriteDailyCutoverRequestBit(
+                    machine.StatusBitAddress,
+                    true);
+                if (!bitResult.IsSuccess)
+                {
+                    var error = bitResult.Error ?? new InvalidOperationException(
+                        $"Không thể bật bit chờ chốt ngày cho máy {machine.Code}.");
+                    await _unitOfWorkRepository.CancelDailyCutoverAsync(
+                        machine.Id,
+                        reportDate);
+                    _logger.LogError(
+                        error,
+                        "Không bật được bit chờ phản hồi chốt ngày cho máy {MachineCode}",
+                        machine.Code);
+                    failures.Add(error);
+                    continue;
+                }
+
                 var result = await _plcService.WriteProcessStatus(machine, 8);
                 if (!result.IsSuccess)
                 {
                     var error = result.Error ?? new InvalidOperationException(
                         $"Không gửi được lệnh chốt thời gian cho máy {machine.Code}.");
+                    var resetResult = await _plcService.WriteDailyCutoverRequestBit(
+                        machine.StatusBitAddress,
+                        false);
+                    if (!resetResult.IsSuccess)
+                    {
+                        _logger.LogError(
+                            resetResult.Error,
+                            "Không reset được bit chờ phản hồi sau khi gửi lệnh chốt thất bại. " +
+                            "MachineCode={MachineCode}, StatusBitAddress={StatusBitAddress}",
+                            machine.Code,
+                            machine.StatusBitAddress);
+                    }
+
                     await _unitOfWorkRepository.CancelDailyCutoverAsync(
                         machine.Id,
                         reportDate);

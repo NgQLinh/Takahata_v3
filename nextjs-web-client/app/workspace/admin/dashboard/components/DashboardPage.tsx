@@ -271,28 +271,29 @@ function MachineCard({
   };
 
   return (
-    <Card
-      className={`
+    <div
+      className="h-full overflow-hidden rounded-xl"
+      style={{ border: `3px solid ${cfg?.color ?? "#94a3b8"}` }}
+    >
+      <Card
+        className={`
     h-full
     overflow-hidden
-    rounded-xl
-    border
-    border-slate-200
-    border-l-[5px]
+    rounded-none
     shadow-sm
     transition-all duration-200
     hover:-translate-y-0.5
     hover:shadow-md
   `}
-      style={{ borderLeftColor: cfg?.color ?? "#94a3b8" }}
-      styles={{
-        body: {
-          padding: 0,
-          height: "100%",
-        },
-      }}
-    >
-      <div className="flex h-full flex-col">
+        style={{ border: "none" }}
+        styles={{
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <div className="flex h-full flex-col">
         {/* Hàng 1: Trạng thái máy */}
         <div
           className={`
@@ -410,8 +411,9 @@ function MachineCard({
             <span className="md:hidden">Kế hoạch</span>
           </Button>
         </div>
-      </div>
-    </Card>
+        </div>
+      </Card>
+    </div>
   );
 }
 

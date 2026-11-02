@@ -266,6 +266,7 @@ namespace TAKAHATA.Infrastructure.Persistence.Repositories
                                     waitingTime,
                                     setupTime);
                                 await transaction.CommitAsync();
+                                await ResetDailyCutoverRequestBitAsync(statusBitAddress);
                                 return;
                             }
 
@@ -432,6 +433,7 @@ namespace TAKAHATA.Infrastructure.Persistence.Repositories
                         "StatusBitAddress={StatusBitAddress}",
                         statusBitAddress);
                     await transaction.CommitAsync();
+                    await ResetDailyCutoverRequestBitAsync(statusBitAddress);
                     return;
                 }
 
@@ -657,6 +659,11 @@ namespace TAKAHATA.Infrastructure.Persistence.Repositories
                 await _dbContext.SaveChangesAsync();
                 await transaction.CommitAsync();
 
+                if (isFinalPacket)
+                {
+                    await ResetDailyCutoverRequestBitAsync(statusBitAddress);
+                }
+
                 if (machine != null &&
                     continuationPartIdToWrite.HasValue &&
                     continuationProcessIdToWrite.HasValue)
@@ -708,6 +715,21 @@ namespace TAKAHATA.Infrastructure.Persistence.Repositories
                     statusBitAddress,
                     processId);
                 throw;
+            }
+        }
+
+        private async Task ResetDailyCutoverRequestBitAsync(int statusBitAddress)
+        {
+            var result = await _plcService.WriteDailyCutoverRequestBit(
+                statusBitAddress,
+                false);
+            if (!result.IsSuccess)
+            {
+                _logger.LogError(
+                    result.Error,
+                    "Đã nhận gói chốt thời gian nhưng không reset được bit yêu cầu. " +
+                    "StatusBitAddress={StatusBitAddress}",
+                    statusBitAddress);
             }
         }
 
