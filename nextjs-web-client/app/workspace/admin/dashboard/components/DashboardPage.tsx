@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 
 import {
@@ -9,9 +9,9 @@ import {
 } from "@/app/services/machine/MachineService";
 import { MachineLog } from "@/app/types/machine/MachineLog";
 import { MachineStatus } from "@/app/types/machine/MachineStatus";
-import { Machine } from "@/app/types";
 import { Button, Card, Tooltip } from "antd";
 import DetailPlant from "./DetailPlant";
+import "./DashboardPage.css";
 
 export const statusConfig: Record<
   MachineStatus,
@@ -72,10 +72,13 @@ export const statusConfig: Record<
   },
 };
 
+const MACHINE_GRID_GAP = 10;
+
 export function DashboardPage() {
   const [now, setNow] = useState(dayjs());
   const [machineLogs, setMachineLogs] = useState<MachineLog[]>([]);
-  const [machines, setMachines] = useState<Machine[] | null>(null);
+  const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
+  const machineGridRef = useRef<HTMLDivElement>(null);
 
   const [showPlan, setShowPlan] = useState(false);
   const [machineLog, setMachineLog] = useState<MachineLog | null>(null);
@@ -94,35 +97,153 @@ export function DashboardPage() {
     );
   }, [machineLogs, selectedStatus]);
 
+  const machineLayout = useMemo(() => {
+    const count = filteredMachineLogs.length;
+    const { width, height } = gridSize;
+
+    if (count === 0 || width === 0 || height === 0) {
+      return null;
+    }
+
+    const idealRows = Math.sqrt((count * height) / width);
+    let bestSize = 0;
+    let bestRows = 1;
+    let bestRowDistance = Number.POSITIVE_INFINITY;
+    let bestColumns = count;
+    let bestLandscapeSize = 0;
+    let bestLandscapeRows = 1;
+    let bestLandscapeColumns = count;
+    let bestLandscapeRowDistance = Number.POSITIVE_INFINITY;
+
+    for (let columns = 1; columns <= count; columns += 1) {
+      const rows = Math.ceil(count / columns);
+      const tileWidth =
+        (width - MACHINE_GRID_GAP * (columns - 1)) / columns;
+      const tileHeight = (height - MACHINE_GRID_GAP * (rows - 1)) / rows;
+      const size = Math.floor(Math.min(tileWidth, tileHeight));
+      const rowDistance = Math.abs(rows - idealRows);
+
+      if (tileWidth <= 0 || tileHeight <= 0) {
+        continue;
+      }
+
+      if (
+        size > bestSize ||
+        (size === bestSize &&
+          (rowDistance < bestRowDistance ||
+            (rowDistance === bestRowDistance && columns > bestColumns)))
+      ) {
+        bestSize = size;
+        bestRows = rows;
+        bestColumns = columns;
+        bestRowDistance = rowDistance;
+      }
+
+      if (
+        tileWidth >= tileHeight * 0.9 &&
+        (size > bestLandscapeSize ||
+          (size === bestLandscapeSize &&
+            (rowDistance < bestLandscapeRowDistance ||
+              (rowDistance === bestLandscapeRowDistance &&
+                columns > bestLandscapeColumns))))
+      ) {
+        bestLandscapeSize = size;
+        bestLandscapeRows = rows;
+        bestLandscapeColumns = columns;
+        bestLandscapeRowDistance = rowDistance;
+      }
+    }
+
+    const useLandscapeLayout = bestLandscapeSize > 0;
+    const rows = useLandscapeLayout ? bestLandscapeRows : bestRows;
+    const columns = useLandscapeLayout ? bestLandscapeColumns : bestColumns;
+
+    return {
+      width: (width - MACHINE_GRID_GAP * (columns - 1)) / columns,
+      height: (height - MACHINE_GRID_GAP * (rows - 1)) / rows,
+      columns,
+      rows,
+    };
+  }, [filteredMachineLogs.length, gridSize]);
+
+  const machineRows = useMemo(() => {
+    if (!machineLayout || filteredMachineLogs.length === 0) {
+      return [];
+    }
+
+    return Array.from({ length: machineLayout.rows }, (_, rowIndex) =>
+      filteredMachineLogs.slice(
+        rowIndex * machineLayout.columns,
+        (rowIndex + 1) * machineLayout.columns,
+      ),
+    );
+  }, [filteredMachineLogs, machineLayout]);
+
+  useEffect(() => {
+    const grid = machineGridRef.current;
+    if (!grid) {
+      return;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) {
+        return;
+      }
+
+      const width = Math.floor(entry.contentRect.width);
+      const height = Math.floor(entry.contentRect.height);
+
+      setGridSize((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height },
+      );
+    });
+
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     const timer = setInterval(() => setNow(dayjs()), 1000);
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
+    let loading = false;
+
     const load = async () => {
+      if (loading) {
+        return;
+      }
+
+      loading = true;
       try {
-        if (!machines) {
-          const ms = await getMachinesAsync();
-          if (ms) {
-            setMachines(ms);
-          }
-        } else {
-          const machineIds = machines.map((machine) => machine.id);
-          const data = await getLatestMachineLogsAsync({
-            machineIds: machineIds,
-          });
-          setMachineLogs(data);
-        }
+        const machines = await getMachinesAsync();
+        const machineOrder = new Map(
+          machines.map((machine, index) => [machine.id, index]),
+        );
+        const data = await getLatestMachineLogsAsync({
+          machineIds: machines.map((machine) => machine.id),
+        });
+
+        data.sort(
+          (first, second) =>
+            (machineOrder.get(first.id) ?? Number.MAX_SAFE_INTEGER) -
+            (machineOrder.get(second.id) ?? Number.MAX_SAFE_INTEGER),
+        );
+        setMachineLogs(data);
       } catch (error) {
         console.log(error);
+      } finally {
+        loading = false;
       }
     };
 
-    load();
+    void load();
     const timer = setInterval(load, 5000);
     return () => clearInterval(timer);
-  }, [machines]);
+  }, []);
 
   const summary = useMemo(() => {
     const countStatus = (status: MachineStatus) =>
@@ -210,27 +331,33 @@ export function DashboardPage() {
       </div>
 
       {/* Danh sách máy */}
-      <div className="card grow d-flex flex-column overflow-hidden">
+      <div className="card grow d-flex flex-column overflow-hidden dashboard-list">
         <div className="card-header d-flex justify-content-between align-items-center shrink-0">
           <strong>Trạng thái realtime</strong>
           <span>{now.format("DD/MM/YYYY HH:mm:ss")}</span>
         </div>
 
-        <div className="card-body overflow-hidden">
-          <div className="overflow-auto h-100">
-            <div className="row row-cols-1 row-cols-md-2 row-cols-lg-5 g-3">
-              {filteredMachineLogs.map((log) => (
+        <div className="card-body overflow-hidden dashboard-list-body">
+          <div ref={machineGridRef} className="dashboard-machine-grid">
+            <div className="dashboard-machine-grid-items">
+              {machineRows.map((row, rowIndex) => (
                 <div
-                  key={`${log.id}-${String(log.machineStatusChangeAt)}`}
-                  className="col"
+                  className="dashboard-machine-row"
+                  key={rowIndex}
+                  style={{ height: machineLayout?.height ?? 0 }}
                 >
-                  <MachineCard
-                    machineLog={log}
-                    onViewTodayPlan={(log) => {
-                      setMachineLog(log);
-                      setShowPlan(true);
-                    }}
-                  />
+                  {row.map((log) => (
+                    <MachineCard
+                      key={`${log.id}-${String(log.machineStatusChangeAt)}`}
+                      machineLog={log}
+                      width={machineLayout?.width ?? 0}
+                      height={machineLayout?.height ?? 0}
+                      onViewTodayPlan={(log) => {
+                        setMachineLog(log);
+                        setShowPlan(true);
+                      }}
+                    />
+                  ))}
                 </div>
               ))}
             </div>
@@ -257,9 +384,13 @@ function getMachineStatus(log: MachineLog): MachineStatus {
 
 function MachineCard({
   machineLog,
+  width,
+  height,
   onViewTodayPlan,
 }: {
   machineLog: MachineLog;
+  width: number;
+  height: number;
   onViewTodayPlan: (log: MachineLog) => void;
 }) {
   const machineStatus = getMachineStatus(machineLog);
@@ -272,19 +403,15 @@ function MachineCard({
 
   return (
     <div
-      className="h-full overflow-hidden rounded-xl"
-      style={{ border: `3px solid ${cfg?.color ?? "#94a3b8"}` }}
+      className="dashboard-machine-tile"
+      style={{
+        width,
+        height,
+        border: `3px solid ${cfg?.color ?? "#94a3b8"}`,
+      }}
     >
       <Card
-        className={`
-    h-full
-    overflow-hidden
-    rounded-none
-    shadow-sm
-    transition-all duration-200
-    hover:-translate-y-0.5
-    hover:shadow-md
-  `}
+        className="dashboard-machine-card"
         style={{ border: "none" }}
         styles={{
           body: {
@@ -293,124 +420,65 @@ function MachineCard({
           },
         }}
       >
-        <div className="flex h-full flex-col">
-        {/* Hàng 1: Trạng thái máy */}
-        <div
-          className={`
-        flex min-h-19
-        items-center justify-center
-        overflow-hidden
-        px-4 py-3
-      `}
-          style={{ backgroundColor: cfg?.color ?? "#f1f5f9" }}
-        >
+        <div className="dashboard-machine-content">
           <div
-            className={`
-          flex min-h-16
-          w-full
-          items-center justify-center
-          rounded-lg
-          px-4 py-3
-          text-center
-          text-xl font-extrabold
-          uppercase tracking-wider
-          shadow-sm
-          md:text-2xl
-        `}
-            style={{
-              backgroundColor: cfg?.color ?? "#334155",
-              color: cfg?.foreground ?? "#fff",
-            }}
+            className="dashboard-machine-status"
+            style={{ backgroundColor: cfg?.color ?? "#f1f5f9" }}
           >
-            <i className={`bi ${cfg?.icon ?? "bi-circle"} me-2`} />
-
-            <span className="truncate">
-              {cfg?.text ?? machineLog?.machineStatus ?? "-"}
-            </span>
-          </div>
-        </div>
-
-        {/* Hàng 2: Tên máy */}
-        <div
-          className="
-        flex min-h-25
-        flex-col items-center justify-center
-        border-b border-slate-200
-        bg-white
-        px-4 py-4
-        text-center
-      "
-        >
-          <Tooltip title={machineLog?.name}>
             <div
-              className="
-              w-full
-              truncate
-              text-2xl font-bold
-              text-slate-800
-              md:text-3xl
-            "
+              className="dashboard-machine-status-label"
+              style={{
+                backgroundColor: cfg?.color ?? "#334155",
+                color: cfg?.foreground ?? "#fff",
+              }}
             >
-              {machineLog?.name ?? "-"}
-            </div>
-          </Tooltip>
+              <i className={`bi ${cfg?.icon ?? "bi-circle"} me-2`} />
 
-          <div className="mt-1 text-sm font-semibold text-slate-500">
-            {machineLog?.code ?? "-"}
+              <span className="truncate">
+                {cfg?.text ?? machineLog?.machineStatus ?? "-"}
+              </span>
+            </div>
           </div>
 
-          {machineLog?.type && (
-            <div className="mt-1 w-full truncate text-xs text-slate-400">
-              {machineLog.type}
-            </div>
-          )}
-        </div>
-
-        {/* Hàng 3: Part code + nút kế hoạch */}
-        <div
-          className="
-            d-flex flex-column min-h-23
-            items-center justify-between
-            gap-3
-            bg-slate-50
-            px-4 py-3
-          "
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="shrink-0 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Tên chi tiết:
-            </div>
-
-            <Tooltip title={machineLog?.part?.code}>
-              <div className="min-w-0 flex-1 truncate text-xl font-bold text-slate-800">
-                {machineLog?.part?.index?.code ?? "-"}-
-                {machineLog?.part?.code ?? "-"}
+          <div className="dashboard-machine-info">
+            <Tooltip title={machineLog?.name}>
+              <div className="dashboard-machine-name">
+                {machineLog?.name ?? "-"}
               </div>
             </Tooltip>
+
+            <div className="dashboard-machine-code">
+              {machineLog?.code ?? "-"}
+              {machineLog?.type ? ` · ${machineLog.type}` : ""}
+            </div>
           </div>
 
-          <Button
-            type="primary"
-            size="small"
-            className="
-              flex!
-              shrink-0
-              items-center
-              justify-center
-              rounded-lg!
-              px-3!
-              font-semibold
-              shadow-sm
-              transition-transform duration-200
-              hover:scale-105
-            "
-            icon={<i className="bi bi-calendar3" />}
-            onClick={() => handleViewTodayPlan(machineLog)}
-          >
-            <span className="hidden md:inline">Kế hoạch hôm nay</span>
-            <span className="md:hidden">Kế hoạch</span>
-          </Button>
-        </div>
+          <div className="dashboard-machine-footer">
+            <div className="dashboard-machine-part">
+              <span className="dashboard-machine-part-label">
+                Tên chi tiết:
+              </span>
+              <Tooltip
+                title={`${machineLog?.part?.index?.code ?? "-"}-${machineLog?.part?.code ?? "-"}`}
+              >
+                <div className="dashboard-machine-part-code">
+                  {machineLog?.part?.index?.code ?? "-"}-
+                  {machineLog?.part?.code ?? "-"}
+                </div>
+              </Tooltip>
+            </div>
+
+            <Button
+              type="primary"
+              size="small"
+              className="dashboard-machine-plan-button"
+              title="Kế hoạch hôm nay"
+              icon={<i className="bi bi-calendar3" />}
+              onClick={() => handleViewTodayPlan(machineLog)}
+            >
+              Kế hoạch
+            </Button>
+          </div>
         </div>
       </Card>
     </div>

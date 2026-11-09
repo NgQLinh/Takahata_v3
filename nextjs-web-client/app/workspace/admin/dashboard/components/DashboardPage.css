@@ -1,0 +1,206 @@
+.dashboard-list {
+  min-height: 0;
+}
+
+.dashboard-list-body {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 0.25rem;
+}
+
+.dashboard-machine-grid {
+  display: flex;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.dashboard-machine-grid-items {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-content: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.dashboard-machine-row {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 0;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.dashboard-machine-tile {
+  box-sizing: border-box;
+  container-type: inline-size;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 0.75rem;
+}
+
+.dashboard-machine-card,
+.dashboard-machine-card .ant-card-body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.dashboard-machine-card {
+  border-radius: 0;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 12%);
+  transition:
+    transform 200ms,
+    box-shadow 200ms;
+}
+
+.dashboard-machine-tile:hover .dashboard-machine-card {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgb(15 23 42 / 16%);
+}
+
+.dashboard-machine-content {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.dashboard-machine-status {
+  display: flex;
+  min-height: 0;
+  flex: 0 0 27%;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0.2rem;
+}
+
+.dashboard-machine-status-label {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0.4rem;
+  padding: 0.15rem 0.35rem;
+  font-size: clamp(0.55rem, 8cqi, 1.25rem);
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-machine-status-label i {
+  flex: 0 0 auto;
+  margin-right: 0.35rem;
+}
+
+.dashboard-machine-info {
+  display: flex;
+  min-height: 0;
+  flex: 0 0 36%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 0.15rem 0.4rem;
+  text-align: center;
+}
+
+.dashboard-machine-name {
+  width: 100%;
+  overflow: hidden;
+  color: #1e293b;
+  font-size: clamp(0.7rem, 12cqi, 1.65rem);
+  font-weight: 700;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-machine-code {
+  width: 100%;
+  overflow: hidden;
+  color: #64748b;
+  font-size: clamp(0.55rem, 6cqi, 0.8rem);
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-machine-footer {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  background: #f8fafc;
+  padding: 0.2rem 0.35rem;
+}
+
+.dashboard-machine-part {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  flex: 0 1 auto;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.2rem;
+  overflow: hidden;
+}
+
+.dashboard-machine-part-label {
+  flex: 0 0 auto;
+  overflow: hidden;
+  color: #64748b;
+  font-size: clamp(0.6rem, 5.5cqi, 0.75rem);
+  font-weight: 600;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-machine-part-code {
+  min-width: 0;
+  overflow: hidden;
+  color: #1e293b;
+  font-size: clamp(0.7rem, 7.5cqi, 1rem);
+  font-weight: 700;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-machine-plan-button {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.4rem !important;
+  padding-inline: 0.4rem !important;
+  font-size: clamp(0.55rem, 5cqi, 0.75rem);
+  font-weight: 600;
+}
+
+@media (max-width: 576px) {
+  .dashboard-machine-part {
+    align-items: center;
+  }
+}
