@@ -6,6 +6,7 @@ using TAKAHATA.Application.Services;
 using TAKAHATA.Application.Common.Interface.Repositories;
 using TAKAHATA.Contracts.Equipment;
 using TAKAHATA.Contracts.IndexAndPart;
+using TAKAHATA.Domain.MasterData;
 
 namespace TAKAHATA.Application.DataLog.Queries
 {
@@ -13,15 +14,18 @@ namespace TAKAHATA.Application.DataLog.Queries
     {
         private readonly IMachineRepository _machineRepository;
         private readonly IPartProcessRepository _partProcessRepository;
+        private readonly IMachineMaintenanceProcessRepository _machineMaintenanceProcessRepository;
         private readonly IMapper _mapper;
 
         public MachineLogsQueryHandler(
             IMachineRepository machineRepository,
             IPartProcessRepository partProcessRepository,
+            IMachineMaintenanceProcessRepository machineMaintenanceProcessRepository,
             IMapper mapper)
         {
             _machineRepository = machineRepository;
             _partProcessRepository = partProcessRepository;
+            _machineMaintenanceProcessRepository = machineMaintenanceProcessRepository;
             _mapper = mapper;
         }
 
@@ -45,6 +49,16 @@ namespace TAKAHATA.Application.DataLog.Queries
 
             var hasPlantMachineIds = await _machineRepository.GetHasPlantMachine(
                 machineList.Select(machine => machine.Id).ToList());
+            var maintenanceProcesses = await _machineMaintenanceProcessRepository
+                .GetByMachineIdsAndDateAsync(
+                    machineList.Select(machine => machine.Id).ToList(),
+                    VietnamTime.Today.ToDateTime(TimeOnly.MinValue));
+            var maintenanceMachineIds = maintenanceProcesses
+                .Where(process =>
+                    process.Status != ProcessStatus.Completed &&
+                    process.Status != ProcessStatus.Cancelled)
+                .Select(process => process.MachineId)
+                .ToHashSet();
 
             var response = machineList.Select(machine =>
             {
@@ -63,6 +77,7 @@ namespace TAKAHATA.Application.DataLog.Queries
                         ? null
                         : _mapper.Map<PartResponse>(process.Part),
                     IDLE = !hasPlantMachineIds.Contains(machine.Id),
+                    HasScheduledMaintenance = maintenanceMachineIds.Contains(machine.Id),
                 };
             }).ToList();
 

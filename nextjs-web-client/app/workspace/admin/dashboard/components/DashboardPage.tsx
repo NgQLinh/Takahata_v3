@@ -11,6 +11,7 @@ import { MachineLog } from "@/app/types/machine/MachineLog";
 import { MachineStatus } from "@/app/types/machine/MachineStatus";
 import { Button, Card, Tooltip } from "antd";
 import DetailPlant from "./DetailPlant";
+import MaintenanceScheduleModal from "./MaintenanceScheduleModal";
 import "./DashboardPage.css";
 
 export const statusConfig: Record<
@@ -58,8 +59,8 @@ export const statusConfig: Record<
   },
 
   [MachineStatus.Maintenance]: {
-    text: "MAINTENANCE",
-    color: "#0d6efd",
+    text: "REPAIR OR MAINTENANCE",
+    color: "#dc3545",
     foreground: "#fff",
     icon: "bi-tools",
   },
@@ -81,6 +82,7 @@ export function DashboardPage() {
   const machineGridRef = useRef<HTMLDivElement>(null);
 
   const [showPlan, setShowPlan] = useState(false);
+  const [showMaintenanceSchedule, setShowMaintenanceSchedule] = useState(false);
   const [machineLog, setMachineLog] = useState<MachineLog | null>(null);
 
   const [selectedStatus, setSelectedStatus] = useState<MachineStatus | null>(
@@ -356,6 +358,10 @@ export function DashboardPage() {
                         setMachineLog(log);
                         setShowPlan(true);
                       }}
+                      onViewMaintenanceSchedule={(log) => {
+                        setMachineLog(log);
+                        setShowMaintenanceSchedule(true);
+                      }}
                     />
                   ))}
                 </div>
@@ -370,11 +376,22 @@ export function DashboardPage() {
         machineId={machineLog?.id || null}
         onClose={() => setShowPlan(false)}
       />
+      {showMaintenanceSchedule && (
+        <MaintenanceScheduleModal
+          open={showMaintenanceSchedule}
+          machine={machineLog}
+          onClose={() => setShowMaintenanceSchedule(false)}
+        />
+      )}
     </div>
   );
 }
 
 function getMachineStatus(log: MachineLog): MachineStatus {
+  if (log.hasScheduledMaintenance) {
+    return MachineStatus.Maintenance;
+  }
+
   return (log.machineStatus === MachineStatus.Stopped ||
     log.machineStatus === MachineStatus.Paused) &&
     log.idle
@@ -387,11 +404,13 @@ function MachineCard({
   width,
   height,
   onViewTodayPlan,
+  onViewMaintenanceSchedule,
 }: {
   machineLog: MachineLog;
   width: number;
   height: number;
   onViewTodayPlan: (log: MachineLog) => void;
+  onViewMaintenanceSchedule: (log: MachineLog) => void;
 }) {
   const machineStatus = getMachineStatus(machineLog);
 
@@ -422,22 +441,46 @@ function MachineCard({
       >
         <div className="dashboard-machine-content">
           <div
-            className="dashboard-machine-status"
+            className={`dashboard-machine-status ${
+              machineLog.hasScheduledMaintenance
+                ? "dashboard-machine-status-maintenance"
+                : ""
+            }`}
             style={{ backgroundColor: cfg?.color ?? "#f1f5f9" }}
           >
-            <div
-              className="dashboard-machine-status-label"
-              style={{
-                backgroundColor: cfg?.color ?? "#334155",
-                color: cfg?.foreground ?? "#fff",
-              }}
-            >
-              <i className={`bi ${cfg?.icon ?? "bi-circle"} me-2`} />
-
-              <span className="truncate">
-                {cfg?.text ?? machineLog?.machineStatus ?? "-"}
-              </span>
-            </div>
+            {machineLog.hasScheduledMaintenance ? (
+              <button
+                type="button"
+                className="dashboard-machine-status-label dashboard-machine-status-button"
+                title="Xem lịch bảo dưỡng"
+                onClick={() => onViewMaintenanceSchedule(machineLog)}
+                style={{
+                  backgroundColor: cfg?.color ?? "#334155",
+                  color: cfg?.foreground ?? "#fff",
+                }}
+              >
+                <i
+                  className={`bi ${cfg?.icon ?? "bi-tools"} dashboard-maintenance-status-icon`}
+                  aria-hidden="true"
+                />
+                <span className="dashboard-maintenance-status-text">
+                  {cfg?.text ?? machineLog?.machineStatus ?? "-"}
+                </span>
+              </button>
+            ) : (
+              <div
+                className="dashboard-machine-status-label"
+                style={{
+                  backgroundColor: cfg?.color ?? "#334155",
+                  color: cfg?.foreground ?? "#fff",
+                }}
+              >
+                <i className={`bi ${cfg?.icon ?? "bi-circle"} me-2`} />
+                <span className="truncate">
+                  {cfg?.text ?? machineLog?.machineStatus ?? "-"}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="dashboard-machine-info">
