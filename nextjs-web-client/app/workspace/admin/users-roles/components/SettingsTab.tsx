@@ -28,6 +28,7 @@ import {
   getSettingsAsync,
   readMachineBitsAsync,
   resetDailyCutoverStateAsync,
+  testPLCConnectionAsync,
   updateSettingsAsync,
   writeMachineBitsAsync,
 } from "@/app/services/settings/SettingsService";
@@ -74,6 +75,7 @@ export default function SettingsTab({ active }: Props) {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
 
   const [loadingMachines, setLoadingMachines] = useState(false);
   const [machineSource, setMachineSource] = useState<Machine[]>([]);
@@ -158,6 +160,39 @@ export default function SettingsTab({ active }: Props) {
       toast.error("Có lỗi xảy ra khi update settings.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    let values: SettingsFormValues;
+    try {
+      values = await form.validateFields(["ipAddress", "port"]);
+    } catch {
+      return;
+    }
+
+    setTestingConnection(true);
+    try {
+      const result = await testPLCConnectionAsync({
+        ipAddress: values.ipAddress.trim(),
+        port: values.port,
+      });
+
+      if (result.isConnected) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      console.error("Kiểm tra kết nối PLC thất bại:", error);
+
+      if (error instanceof ApiError) {
+        toast.error(error.getDisplayMessage());
+      } else {
+        toast.error("Không thể kiểm tra kết nối PLC.");
+      }
+    } finally {
+      setTestingConnection(false);
     }
   };
 
@@ -449,10 +484,19 @@ export default function SettingsTab({ active }: Props) {
 
             <div className="d-flex justify-content-end align-items-center gap-2 flex-wrap mt-3">
               <Button
+                icon={<ApiOutlined />}
+                loading={testingConnection}
+                disabled={saving}
+                onClick={() => void handleTestConnection()}
+              >
+                Kiểm tra kết nối
+              </Button>
+              <Button
                 type="primary"
                 htmlType="submit"
                 icon={<SaveOutlined />}
                 loading={saving}
+                disabled={testingConnection}
               >
                 Lưu cài đặt
               </Button>

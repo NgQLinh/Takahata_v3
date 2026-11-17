@@ -27,6 +27,7 @@ import {
 import {
   getMachinesByPermissionAsync,
   getPartProcessByMachineAsync,
+  operateMachineMaintenanceProcessAsync,
 } from "@/app/services/machine/MachineService";
 import { toast } from "react-toastify";
 import dayjs, { Dayjs } from "dayjs";
@@ -62,6 +63,10 @@ type ProcessingFormValues = {
   programmingTime: number;
 };
 
+type MaintenanceFormValues = {
+  performedBy: string;
+};
+
 export default function WorkerPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
@@ -71,6 +76,7 @@ export default function WorkerPage() {
 
   // New state
   const [today, setToday] = useState<Dayjs>(() => dayjs().startOf("day"));
+  const [currentTime, setCurrentTime] = useState<Dayjs>(() => dayjs());
   const [machineKeyword, setMachineKeyword] = useState("");
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
@@ -79,9 +85,13 @@ export default function WorkerPage() {
     useState<ManufacturingProcess | null>(null);
 
   const [processingForm] = Form.useForm<ProcessingFormValues>();
+  const [maintenanceForm] = Form.useForm<MaintenanceFormValues>();
 
   const [processingAction, setProcessingAction] = useState<
     "start" | "pause" | "complete" | null
+  >(null);
+  const [maintenanceAction, setMaintenanceAction] = useState<
+    "start" | "pause" | "resume" | "complete" | null
   >(null);
 
   // New function
@@ -139,7 +149,10 @@ export default function WorkerPage() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      const currentDay = dayjs().startOf("day");
+      const now = dayjs();
+      setCurrentTime(now);
+
+      const currentDay = now.startOf("day");
       if (!today.isSame(currentDay, "day")) {
         setToday(currentDay);
       }
@@ -197,14 +210,79 @@ export default function WorkerPage() {
   }
 
   const selectedProcessStatus = selectedProcess?.status;
+  const isMaintenanceProcess =
+    selectedProcess?.processType ===
+    ManufacturingProcessType.MaintenanceProcesses;
+  const hasActiveMaintenance = useMemo(
+    () =>
+      processes.some(
+        (process) =>
+          process.processType ===
+            ManufacturingProcessType.MaintenanceProcesses &&
+          process.status === ProcessStatus.InProgress,
+      ),
+    [processes],
+  );
+  const hasActiveManufacturingOperation = useMemo(
+    () =>
+      processes.some(
+        (process) =>
+          process.processType === ManufacturingProcessType.PartProcess &&
+          (process.status === ProcessStatus.InProgress || process.isSettingUp),
+      ),
+    [processes],
+  );
+  const maintenanceDurationHours = (() => {
+    if (!isMaintenanceProcess || !selectedProcess?.startTime) {
+      return null;
+    }
+
+    const startTime = dayjs(selectedProcess.startTime);
+    const endTime = selectedProcess.endTime
+      ? dayjs(selectedProcess.endTime)
+      : selectedProcess.status === ProcessStatus.InProgress ||
+          selectedProcess.status === ProcessStatus.Paused
+        ? currentTime
+        : null;
+
+    if (!endTime || !startTime.isValid() || !endTime.isValid()) {
+      return null;
+    }
+
+    const durationHours =
+      (endTime.valueOf() - startTime.valueOf()) / 3_600_000;
+
+    if (durationHours < 0) {
+      return null;
+    }
+
+    return (Math.round(durationHours * 100) / 100).toFixed(2);
+  })();
   const isCutoverLocked = selectedProcess?.isCutoverCompleted === true;
-  const isActionLoading = processingAction !== null;
+  const isActionLoading =
+    processingAction !== null || maintenanceAction !== null;
+
+  useEffect(() => {
+    if (isMaintenanceProcess) {
+      maintenanceForm.setFieldsValue({
+        performedBy: selectedProcess?.performedBy ?? "",
+      });
+    } else {
+      maintenanceForm.resetFields();
+    }
+  }, [
+    isMaintenanceProcess,
+    maintenanceForm,
+    selectedProcess?.id,
+    selectedProcess?.performedBy,
+  ]);
 
   // Ma trận trạng thái:
   // Planned -> được bắt đầu.
   // Paused/PartiallyCompleted -> được tiếp tục.
   // InProgress -> được tạm dừng hoặc ghi nhận hoàn thành.
   const canStartProcessing =
+    !hasActiveMaintenance &&
     !isCutoverLocked &&
     (selectedProcessStatus === ProcessStatus.Planned ||
       selectedProcessStatus === ProcessStatus.Paused ||
@@ -213,14 +291,18 @@ export default function WorkerPage() {
   // selectedMachine != null &&
   // selectedMachine.isAutomatic;
   const canPauseProcessing =
-    !isCutoverLocked && selectedProcessStatus === ProcessStatus.InProgress;
+    !hasActiveMaintenance &&
+    !isCutoverLocked &&
+    selectedProcessStatus === ProcessStatus.InProgress;
   // ||
   // (selectedMachine != null &&
   //   selectedProcess != null &&
   //   !selectedMachine.isAutomatic &&
   //   selectedProcessStatus !== ProcessStatus.Completed)
   const canCompleteProcessing =
-    !isCutoverLocked && selectedProcessStatus === ProcessStatus.InProgress;
+    !hasActiveMaintenance &&
+    !isCutoverLocked &&
+    selectedProcessStatus === ProcessStatus.InProgress;
   // ||
   // (selectedMachine != null &&
   //   selectedProcess != null &&
@@ -243,6 +325,47 @@ export default function WorkerPage() {
         return "Bắt đầu gia công";
     }
   })();
+
+  const handleMaintenanceOperation = async (
+    action: "start" | "pause" | "resume" | "complete",
+  ) => {
+    if (!selectedProcess || !isMaintenanceProcess || maintenanceAction) {
+      return;
+    }
+
+    let values: MaintenanceFormValues;
+    try {
+      values = await maintenanceForm.validateFields();
+    } catch {
+      return;
+    }
+
+    setMaintenanceAction(action);
+    try {
+      const actionValues = {
+        start: 0,
+        pause: 1,
+        resume: 2,
+        complete: 3,
+      } as const;
+      await operateMachineMaintenanceProcessAsync({
+        id: selectedProcess.id,
+        action: actionValues[action],
+        performedBy: values.performedBy,
+      });
+      toast.success("Cập nhật quá trình bảo trì thành công.");
+      await fetchManufacturingProcess();
+    } catch (error) {
+      if (error instanceof ApiError) {
+        toast.error(error.getDisplayMessage());
+      } else {
+        console.error("Không thể cập nhật quá trình bảo trì:", error);
+        toast.error("Không thể cập nhật quá trình bảo trì.");
+      }
+    } finally {
+      setMaintenanceAction(null);
+    }
+  };
 
   const handleBeginSettingUp = async () => {
     if (
@@ -725,8 +848,204 @@ export default function WorkerPage() {
           </Card>
 
           {/* Thông tin gia công - chiều cao cố định 360px */}
-          {selectedProcess?.processType ==
-          ManufacturingProcessType.MaintenanceProcesses ? null : (
+          {isMaintenanceProcess ? (
+            <Card
+              className="processing-card processing-information-card shrink-0"
+              style={{ height: 500 }}
+              styles={{
+                body: {
+                  height: "calc(100% - 57px)",
+                  padding: 12,
+                  overflow: "hidden",
+                },
+              }}
+              title={
+                <div className="d-flex align-items-center gap-2">
+                  <span className="section-number">3</span>
+                  <span>Thông tin bảo trì</span>
+                </div>
+              }
+            >
+              <Row gutter={[16, 16]} className="h-100">
+                <Col xs={24} lg={8} className="h-100">
+                  <div className="d-flex flex-column h-100 border rounded p-3 bg-light overflow-auto">
+                    <div className="mb-3">
+                      <Text type="secondary" className="d-block mb-1">
+                        Máy
+                      </Text>
+                      <Text strong ellipsis={{ tooltip: true }}>
+                        {selectedMachine
+                          ? `${selectedMachine.code} - ${selectedMachine.name}`
+                          : "Chưa chọn máy"}
+                      </Text>
+                    </div>
+
+                    <div className="mb-3">
+                      <Text type="secondary" className="d-block mb-1">
+                        Công việc
+                      </Text>
+                      <Text strong>
+                        {selectedProcess?.partCode || "Bảo trì"}
+                      </Text>
+                    </div>
+
+                    <div className="mb-3">
+                      <Text type="secondary" className="d-block mb-1">
+                        Bắt đầu
+                      </Text>
+                      <Text strong>
+                        {selectedProcess?.startTime
+                          ? dayjs(selectedProcess.startTime).format(
+                              "DD/MM/YYYY HH:mm:ss",
+                            )
+                          : "-"}
+                      </Text>
+                    </div>
+
+                    <div className="mb-3">
+                      <Text type="secondary" className="d-block mb-1">
+                        Kết thúc
+                      </Text>
+                      <Text strong>
+                        {selectedProcess?.endTime
+                          ? dayjs(selectedProcess.endTime).format(
+                              "DD/MM/YYYY HH:mm:ss",
+                            )
+                          : "-"}
+                      </Text>
+                    </div>
+
+                    <div className="mb-3">
+                      <Text type="secondary" className="d-block mb-1">
+                        Thời gian bảo trì
+                      </Text>
+                      <Text strong>
+                        {maintenanceDurationHours
+                          ? `${maintenanceDurationHours} giờ`
+                          : selectedProcess?.startTime
+                            ? "-"
+                            : "Chưa bắt đầu"}
+                      </Text>
+                    </div>
+
+                    <div className="mb-3">
+                      <Text type="secondary" className="d-block mb-1">
+                        Trạng thái
+                      </Text>
+                      {selectedProcess
+                        ? getStatusTag(selectedProcess.status)
+                        : "-"}
+                    </div>
+
+                    {hasActiveManufacturingOperation && (
+                      <div
+                        className="alert alert-warning py-2 px-3 mb-3"
+                        role="alert"
+                      >
+                        Máy đang có kế hoạch gia công chưa hoàn tất. Vui lòng
+                        tạm dừng hoặc hoàn thành kế hoạch trước khi bảo trì.
+                      </div>
+                    )}
+                  </div>
+                </Col>
+
+                <Col xs={24} lg={16} className="h-100">
+                  <div className="d-flex flex-column h-100 border rounded p-3 overflow-hidden">
+                    <div className="grow overflow-y-auto overflow-x-hidden px-1">
+                      <Form
+                        form={maintenanceForm}
+                        layout="vertical"
+                        disabled={
+                          isActionLoading || hasActiveManufacturingOperation
+                        }
+                      >
+                        <Form.Item
+                          label="Người thực hiện"
+                          name="performedBy"
+                          rules={[
+                            {
+                              required: true,
+                              whitespace: true,
+                              message: "Vui lòng nhập người thực hiện.",
+                            },
+                            {
+                              max: 100,
+                              message:
+                                "Người thực hiện không được vượt quá 100 ký tự.",
+                            },
+                          ]}
+                        >
+                          <Input
+                            maxLength={100}
+                            placeholder="Nhập tên người thực hiện"
+                          />
+                        </Form.Item>
+                      </Form>
+                    </div>
+
+                    <div className="d-flex justify-content-end flex-wrap gap-2 pt-3 mt-2 border-top shrink-0">
+                      <Button
+                        type="primary"
+                        icon={<PlayCircleOutlined />}
+                        loading={maintenanceAction === "start"}
+                        disabled={
+                          selectedProcessStatus !== ProcessStatus.Planned ||
+                          hasActiveMaintenance ||
+                          hasActiveManufacturingOperation ||
+                          isActionLoading
+                        }
+                        onClick={() => void handleMaintenanceOperation("start")}
+                      >
+                        Bắt đầu bảo trì
+                      </Button>
+                      <Button
+                        icon={<PauseOutlined />}
+                        loading={maintenanceAction === "pause"}
+                        disabled={
+                          selectedProcessStatus !== ProcessStatus.InProgress ||
+                          isActionLoading ||
+                          hasActiveManufacturingOperation
+                        }
+                        onClick={() => void handleMaintenanceOperation("pause")}
+                      >
+                        Tạm dừng bảo trì
+                      </Button>
+                      <Button
+                        icon={<PlayCircleOutlined />}
+                        loading={maintenanceAction === "resume"}
+                        disabled={
+                          selectedProcessStatus !== ProcessStatus.Paused ||
+                          isActionLoading ||
+                          hasActiveMaintenance ||
+                          hasActiveManufacturingOperation
+                        }
+                        onClick={() => void handleMaintenanceOperation("resume")}
+                      >
+                        Tiếp tục bảo trì
+                      </Button>
+                      <Button
+                        type="primary"
+                        className="complete-button"
+                        icon={<CheckCircleOutlined />}
+                        loading={maintenanceAction === "complete"}
+                        disabled={
+                          (selectedProcessStatus !== ProcessStatus.InProgress &&
+                            selectedProcessStatus !== ProcessStatus.Paused) ||
+                          isActionLoading ||
+                          hasActiveManufacturingOperation
+                        }
+                        onClick={() =>
+                          void handleMaintenanceOperation("complete")
+                        }
+                      >
+                        Hoàn thành bảo trì
+                      </Button>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+            </Card>
+          ) : (
             <Card
               className="processing-card processing-information-card shrink-0"
               style={{ height: 500 }}
@@ -785,6 +1104,16 @@ export default function WorkerPage() {
                           </Text>
                         </div>
 
+                        {hasActiveMaintenance && (
+                          <div
+                            className="alert alert-warning py-2 px-3 mb-3"
+                            role="alert"
+                          >
+                            Máy đang được bảo trì. Vui lòng hoàn tất hoặc kết
+                            thúc trạng thái bảo trì để tiếp tục thao tác.
+                          </div>
+                        )}
+
                         {selectedProcess && (
                           <div
                             className="alert alert-warning py-2 px-3 mb-3"
@@ -830,6 +1159,7 @@ export default function WorkerPage() {
                           className="mb-2"
                           disabled={
                             isActionLoading ||
+                            hasActiveMaintenance ||
                             isCutoverLocked ||
                             !selectedProcess?.isSettingUp
                           }
@@ -862,7 +1192,7 @@ export default function WorkerPage() {
                         <Form<ProcessingFormValues>
                           form={processingForm}
                           layout="vertical"
-                          disabled={isCutoverLocked}
+                          disabled={isCutoverLocked || hasActiveMaintenance}
                           initialValues={{
                             startTime: 0,
                             machineTime: 0,

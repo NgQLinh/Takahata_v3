@@ -13,6 +13,7 @@ namespace TAKAHATA.Application.Services
 {
     public sealed class PlcTcpListenerService : BackgroundService
     {
+        private const int MaximumPendingFrameLength = 4096;
         private int _port;
         private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
         private readonly ILogger<PlcTcpListenerService> _logger;
@@ -169,6 +170,7 @@ namespace TAKAHATA.Application.Services
                     using NetworkStream stream = client.GetStream();
 
                     byte[] buffer = new byte[4096];
+                    var pendingText = new StringBuilder();
 
                     while (!cancellationToken.IsCancellationRequested)
                     {
@@ -181,76 +183,51 @@ namespace TAKAHATA.Application.Services
                         }
 
                         string text = Encoding.ASCII.GetString(buffer, 0, count);
+                        pendingText.Append(text);
 
-                        _logger.LogInformation(
-                            """
-                            Nhận dữ liệu PLC: {Remote}
-                            Số byte: {Count}
-                            TEXT: {Text}
-                            """,
-                            remote,
-                            count,
-                            text);
-
-                        // Thanh ghi status | trạng thái máy (8 = gói chốt ngày) | mã Part | mã Process | Machine Running | Machine Waiting | Machine Setup
-                        // Format 1100 | 1 | 23 | 159 | 0.50 | 1.00 | 0.03
-                        if (!string.IsNullOrEmpty(text))
+                        while (true)
                         {
-                            var input = text.Replace(" ", "");
+                            var accumulatedText = pendingText.ToString();
+                            var lineFeedIndex = accumulatedText.IndexOf('\n');
+                            if (lineFeedIndex < 0)
+                                break;
 
-                            string[] parts = input.Split('|');
+                            var rawMessage = accumulatedText.Substring(0, lineFeedIndex);
+                            var message = rawMessage.TrimEnd('\r');
+                            pendingText.Remove(0, lineFeedIndex + 1);
 
-                            if (parts.Length != 7)
-                            {
-                                Console.WriteLine("Chuỗi phải chứa đúng 5 giá trị.");
-                                return;
-                            }
-
-                            if (int.TryParse(parts[0], out int statusBitAddress)
-                                && int.TryParse(parts[1], out int status)
-                                && int.TryParse(parts[2], out int partId)
-                                && int.TryParse(parts[3], out int processId)
-                                &&
-                                double.TryParse(
-                                    parts[4],
-                                    NumberStyles.Float,
-                                    CultureInfo.InvariantCulture,
-                                    out double workingTime)
-                                &&
-                                double.TryParse(
-                                    parts[5],
-                                    NumberStyles.Float,
-                                    CultureInfo.InvariantCulture,
-                                    out double waitingTime)
-                                &&
-                                double.TryParse(
-                                    parts[6],
-                                    NumberStyles.Float,
-                                    CultureInfo.InvariantCulture,
-                                    out double setupTime))
-                            {
-                                await using var scope = _serviceScopeFactory.CreateAsyncScope();
-
-                                var machineRepository = scope.ServiceProvider.GetRequiredService<IUnitOfWorkRepository>();
-
-                                await machineRepository.UpdateDataAsync(
-                                    statusBitAddress,
-                                    status,
-                                    partId,
-                                    processId,
-                                    workingTime,
-                                    waitingTime,
-                                    setupTime);
-
+                            if (string.IsNullOrWhiteSpace(message))
                                 continue;
-                            }
-                            else
-                            {
-                                _logger.LogWarning(
-                                    "Bản tin PLC chứa giá trị không hợp lệ: {Text}",
-                                    text);
-                            }
+
+                            _logger.LogInformation(
+                                """
+                                Nhận dữ liệu PLC: {Remote}
+                                Số byte: {Count}
+                                TEXT: {Text}
+                                """,
+                                remote,
+                                Encoding.ASCII.GetByteCount(rawMessage) + 1,
+                                message);
+
+                            await ProcessMessageAsync(message, remote);
                         }
+
+                        if (pendingText.Length > MaximumPendingFrameLength)
+                        {
+                            _logger.LogWarning(
+                                "Bỏ dữ liệu PLC chưa có dấu kết thúc CRLF vì vượt giới hạn {MaxLength} byte. Remote={Remote}",
+                                MaximumPendingFrameLength,
+                                remote);
+                            pendingText.Clear();
+                        }
+                    }
+
+                    if (pendingText.Length > 0)
+                    {
+                        _logger.LogWarning(
+                            "Bỏ bản tin PLC chưa hoàn chỉnh khi kết nối đóng. Remote={Remote}, Text={Text}",
+                            remote,
+                            pendingText.ToString());
                     }
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -279,6 +256,69 @@ namespace TAKAHATA.Application.Services
                         remote);
                 }
             }
+        }
+
+        private async Task ProcessMessageAsync(string message, string remote)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return;
+
+            var parts = message
+                .Split('|')
+                .Select(part => part.Trim())
+                .ToArray();
+
+            if (parts.Length != 7)
+            {
+                _logger.LogWarning(
+                    "Bản tin PLC không hợp lệ: cần 7 trường, nhận {FieldCount}. Remote={Remote}, Text={Text}",
+                    parts.Length,
+                    remote,
+                    message);
+                return;
+            }
+
+            // Thanh ghi status | trạng thái máy (8 = gói chốt ngày) | mã Part | mã Process | Machine Running | Machine Waiting | Machine Setup
+            // Format 1100 | 1 | 23 | 159 | 0.50 | 1.00 | 0.03
+            if (!int.TryParse(parts[0], out int statusBitAddress)
+                || !int.TryParse(parts[1], out int status)
+                || !int.TryParse(parts[2], out int partId)
+                || !int.TryParse(parts[3], out int processId)
+                || !double.TryParse(
+                    parts[4],
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double workingTime)
+                || !double.TryParse(
+                    parts[5],
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double waitingTime)
+                || !double.TryParse(
+                    parts[6],
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double setupTime))
+            {
+                _logger.LogWarning(
+                    "Bản tin PLC chứa giá trị không hợp lệ: Remote={Remote}, Text={Text}",
+                    remote,
+                    message);
+                return;
+            }
+
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var machineRepository =
+                scope.ServiceProvider.GetRequiredService<IUnitOfWorkRepository>();
+
+            await machineRepository.UpdateDataAsync(
+                statusBitAddress,
+                status,
+                partId,
+                processId,
+                workingTime,
+                waitingTime,
+                setupTime);
         }
     }
 }

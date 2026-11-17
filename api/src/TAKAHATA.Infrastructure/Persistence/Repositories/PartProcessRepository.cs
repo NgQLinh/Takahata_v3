@@ -522,14 +522,18 @@ namespace TAKAHATA.Infrastructure.Persistence.Repositories
                 .AsNoTracking()
                 .Where(x =>
                     x.MachineId == machineId &&
-                    x.PlantDate == selectedDate &&
+                    (x.PlantDate == selectedDate ||
+                     x.IsSettingUp ||
+                     (x.Status == ProcessStatus.InProgress && x.EndTime == null)) &&
                     x.Part != null &&
                     !x.Part.IsClosed);
 
             var totalItems = await partProcesses.CountAsync();
 
             var data = await partProcesses
-                .OrderByDescending(x => x.Status)
+                .OrderByDescending(x =>
+                    x.IsSettingUp || x.Status == ProcessStatus.InProgress)
+                .ThenByDescending(x => x.Status)
                 .Skip((currentPage - 1) * currentPageSize)
                 .Take(currentPageSize)
                 .Select(x => new ManufacturingProcessResponse
@@ -687,7 +691,10 @@ namespace TAKAHATA.Infrastructure.Persistence.Repositories
 
             var maintenanceProcesses = await _dbContext.MachineMaintenanceProcesses
                 .AsNoTracking()
-                .Where(x => x.MachineId == machineId && x.PlantDate == selectedDate)
+                .Where(x =>
+                    x.MachineId == machineId &&
+                    (x.PlantDate == selectedDate ||
+                     x.Status == ProcessStatus.InProgress))
                 .ToListAsync();
 
             foreach (var x in maintenanceProcesses)

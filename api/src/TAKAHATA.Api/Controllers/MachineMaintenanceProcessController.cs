@@ -7,7 +7,6 @@ using TAKAHATA.Domain.Common.Constant;
 
 namespace TAKAHATA.Api.Controllers
 {
-    [Authorize(Roles = Role.Admin)]
     public class MachineMaintenanceProcessController : ApiController
     {
         private readonly ISender _sender;
@@ -18,6 +17,7 @@ namespace TAKAHATA.Api.Controllers
         }
 
         [HttpPost("search")]
+        [Authorize(Roles = Role.Admin)]
         public async Task<IActionResult> Search(MachineMaintenanceProcessesQuery request)
         {
             var result = await _sender.Send(request);
@@ -27,6 +27,7 @@ namespace TAKAHATA.Api.Controllers
         }
 
         [HttpPost("create")]
+        [Authorize(Roles = Role.Admin)]
         public async Task<IActionResult> Create(CreateMachineMaintenanceProcessCommand request)
         {
             var result = await _sender.Send(request);
@@ -36,6 +37,7 @@ namespace TAKAHATA.Api.Controllers
         }
 
         [HttpPost("update")]
+        [Authorize(Roles = Role.Admin)]
         public async Task<IActionResult> Update(UpdateMachineMaintenanceProcessCommand request)
         {
             var result = await _sender.Send(request);
@@ -45,6 +47,7 @@ namespace TAKAHATA.Api.Controllers
         }
 
         [HttpPost("delete")]
+        [Authorize(Roles = Role.Admin)]
         public async Task<IActionResult> Delete(DeleteMachineMaintenanceProcessCommand request)
         {
             var result = await _sender.Send(request);
@@ -54,7 +57,18 @@ namespace TAKAHATA.Api.Controllers
         }
 
         [HttpPost("detail")]
+        [Authorize(Roles = Role.Admin)]
         public async Task<IActionResult> GetMaintenanceProcessCommand(MachineMaintenanceProcessQuery request)
+        {
+            var result = await _sender.Send(request);
+            return result.Match(
+                r => Ok(r),
+                e => Problem(e));
+        }
+
+        [HttpPost("operate")]
+        [Authorize(Roles = Role.User)]
+        public async Task<IActionResult> Operate(OperateMachineMaintenanceProcessCommand request)
         {
             var result = await _sender.Send(request);
             return result.Match(

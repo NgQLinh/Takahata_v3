@@ -16,6 +16,20 @@ dotnet ef database update --project ./src/TAKAHATA.Infrastructure/ --startup-pro
 
 ## Docker
 
+Start the MySQL container before running the API:
+
 ```bash
 docker compose up -d
+```
+
+The API connection string must match the local MySQL instance in use:
+- port: `3306`
+- user: `root`
+- password: `200804`
+- database: `TAKAHATA_DB`
+
+Then run:
+
+```bash
+dotnet run --project ./src/TAKAHATA.Api
 ```
