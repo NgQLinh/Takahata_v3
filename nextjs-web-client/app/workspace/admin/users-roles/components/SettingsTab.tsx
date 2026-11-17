@@ -28,6 +28,7 @@ import {
   getSettingsAsync,
   readMachineBitsAsync,
   resetDailyCutoverStateAsync,
+  testPLCConnectionAsync,
   updateSettingsAsync,
   writeMachineBitsAsync,
 } from "@/app/services/settings/SettingsService";
@@ -74,6 +75,7 @@ export default function SettingsTab({ active }: Props) {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testingPLCConnection, setTestingPLCConnection] = useState(false);
 
   const [loadingMachines, setLoadingMachines] = useState(false);
   const [machineSource, setMachineSource] = useState<Machine[]>([]);
@@ -131,6 +133,35 @@ export default function SettingsTab({ active }: Props) {
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
+
+  const handleTestPLCConnection = async () => {
+    setTestingPLCConnection(true);
+
+    try {
+      const values = await form.validateFields();
+      const result = await testPLCConnectionAsync(values);
+
+      if (result.isConnected) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      if (error && typeof error === "object" && "errorFields" in error) {
+        return;
+      }
+
+      console.error("Kiểm tra kết nối PLC thất bại:", error);
+
+      if (error instanceof ApiError) {
+        toast.error(error.getDisplayMessage());
+      } else {
+        toast.error("Không thể kiểm tra kết nối PLC.");
+      }
+    } finally {
+      setTestingPLCConnection(false);
+    }
+  };
 
   const handleSave = async (values: SettingsFormValues) => {
     const request = {
@@ -448,6 +479,14 @@ export default function SettingsTab({ active }: Props) {
             </Card>
 
             <div className="d-flex justify-content-end align-items-center gap-2 flex-wrap mt-3">
+              <Button
+                icon={<ApiOutlined />}
+                loading={testingPLCConnection}
+                disabled={loading || saving}
+                onClick={handleTestPLCConnection}
+              >
+                Kiểm tra kết nối PLC
+              </Button>
               <Button
                 type="primary"
                 htmlType="submit"
