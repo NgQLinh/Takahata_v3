@@ -27,6 +27,7 @@ import {
   clearPendingDailyCutoverAsync,
   getSettingsAsync,
   readMachineBitsAsync,
+  resetDailyCutoverStateAsync,
   updateSettingsAsync,
   writeMachineBitsAsync,
 } from "@/app/services/settings/SettingsService";
@@ -77,6 +78,7 @@ export default function SettingsTab({ active }: Props) {
   const [loadingMachines, setLoadingMachines] = useState(false);
   const [machineSource, setMachineSource] = useState<Machine[]>([]);
   const [clearingPendingCutover, setClearingPendingCutover] = useState(false);
+  const [resettingCutoverCoils, setResettingCutoverCoils] = useState(false);
   const [selectedCutoverMachineId, setSelectedCutoverMachineId] =
     useState<number>();
   const [selectedWriteMachine, setSelectedWriteMachine] =
@@ -206,6 +208,47 @@ export default function SettingsTab({ active }: Props) {
           }
         } finally {
           setClearingPendingCutover(false);
+        }
+      },
+    });
+  };
+
+  const handleResetAllCutoverCoils = () => {
+    Modal.confirm({
+      title: "Reset trạng thái chốt ngày trên toàn bộ máy?",
+      content: (
+        <span>
+          Thao tác này sẽ tắt coil yêu cầu chốt ngày trên tất cả máy đã cấu hình
+          địa chỉ PLC và xóa trạng thái pending trong database để có thể trigger
+          lại. Thao tác <strong>không</strong> đưa thanh ghi ProcessStatus đang có
+          giá trị 8 về 0. Chỉ tiếp tục khi đã xác nhận PLC không còn gửi phản hồi
+          status 8 cũ; nếu phản hồi cũ đến sau khi trigger lại, hệ thống có thể
+          gán nhầm phản hồi đó cho lần chốt mới.
+        </span>
+      ),
+      okText: "Đã xác nhận, reset toàn bộ trạng thái chốt",
+      cancelText: "Hủy",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setResettingCutoverCoils(true);
+        try {
+          const result = await resetDailyCutoverStateAsync();
+          const skippedMessage =
+            result.skippedCount > 0
+              ? ` Bỏ qua ${result.skippedCount} máy chưa cấu hình địa chỉ.`
+              : "";
+          toast.success(
+            `Đã tắt coil cho ${result.resetCount} máy; xóa pending của ${result.pendingMachineCount} máy (${result.pendingClearedCount} trạng thái).${skippedMessage}`,
+          );
+        } catch (error) {
+          console.error("Reset trạng thái chốt ngày thất bại:", error);
+          if (error instanceof ApiError) {
+            toast.error(error.getDisplayMessage());
+          } else {
+            toast.error("Reset trạng thái chốt ngày thất bại.");
+          }
+        } finally {
+          setResettingCutoverCoils(false);
         }
       },
     });
@@ -461,6 +504,24 @@ export default function SettingsTab({ active }: Props) {
                       </Button>
                     </div>
                   </div>
+                </Card>
+              </div>
+              <div className="col-12">
+                <Card title="Reset trạng thái chốt ngày">
+                  <Typography.Paragraph type="secondary">
+                    Tắt coil yêu cầu chốt ngày và xóa pending trong database
+                    trên toàn bộ máy đã cấu hình. Không reset thanh ghi
+                    ProcessStatus có giá trị 8.
+                  </Typography.Paragraph>
+                  <Button
+                    danger
+                    icon={<StopOutlined />}
+                    loading={resettingCutoverCoils}
+                    disabled={loadingMachines || machineSource.length === 0}
+                    onClick={handleResetAllCutoverCoils}
+                  >
+                    Reset trạng thái chốt toàn bộ máy
+                  </Button>
                 </Card>
               </div>
             </div>

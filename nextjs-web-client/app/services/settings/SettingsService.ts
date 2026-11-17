@@ -13,6 +13,21 @@ export const updateSettingsAsync = async (
   return response.data;
 };
 
+export interface TestPLCConnectionResponse {
+  isConnected: boolean;
+  message: string;
+}
+
+export const testPLCConnectionAsync = async (
+  request: { ipAddress: string; port: number },
+): Promise<TestPLCConnectionResponse> => {
+  const response = await apiClient.post<TestPLCConnectionResponse>(
+    "/Settings/test-connection",
+    request,
+  );
+  return response.data;
+};
+
 export interface ClearPendingDailyCutoverResponse {
   machineId: number;
   reportDate: string;
@@ -27,6 +42,21 @@ export const clearPendingDailyCutoverAsync = async (
   );
   return response.data;
 };
+
+export interface ResetDailyCutoverStateResponse {
+  resetCount: number;
+  skippedCount: number;
+  pendingMachineCount: number;
+  pendingClearedCount: number;
+}
+
+export const resetDailyCutoverStateAsync =
+  async (): Promise<ResetDailyCutoverStateResponse> => {
+    const response = await apiClient.post<ResetDailyCutoverStateResponse>(
+      "/Settings/reset-daily-cutover-state",
+    );
+    return response.data;
+  };
 
 export const writeMachineBitsAsync = async (
   request: unknown,
