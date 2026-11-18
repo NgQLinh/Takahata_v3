@@ -114,6 +114,18 @@ export const getMachineMaintenanceProcessAsync = async (
   return response.data;
 };
 
+export const operateMachineMaintenanceProcessAsync = async (request: {
+  id: number;
+  action: 0 | 1 | 2 | 3;
+  performedBy: string;
+}): Promise<MachineMaintenanceProcess> => {
+  const response = await apiClient.post<MachineMaintenanceProcess>(
+    "/MachineMaintenanceProcess/operate",
+    request,
+  );
+  return response.data;
+};
+
 export const getPartProcessByMachineAsync = async (
   request: unknown,
 ): Promise<SearchResponse<ManufacturingProcess[]>> => {

@@ -132,6 +132,20 @@ Chạy script:
 powershell.exe -ExecutionPolicy Bypass -File ".\scripts\build-deploy.ps1"
 ```
 
+Đặt `NEXT_PUBLIC_BASE_URL` trong `.env` thành IP của máy chạy API, ví dụ:
+
+```text
+NEXT_PUBLIC_BASE_URL=http://172.23.19.13:5080/api/v1
+```
+
+Không dùng `localhost` khi máy khác mở website: trên trình duyệt của họ,
+`localhost` là chính máy đó. `NEXT_PUBLIC_BASE_URL` được nhúng lúc build, nên
+đổi giá trị sau khi chép ZIP thì phải build lại gói.
+
+API cũng phải cho phép origin của website trong cấu hình CORS (ví dụ
+`http://172.23.19.13` nếu website chạy trên port 80). Chỉ đổi URL API ở
+frontend sẽ không tự cấu hình CORS trên máy chủ API.
+
 ---
 
 ## 4. Giải nén trên máy Windows triển khai
@@ -639,9 +653,11 @@ thường được nhúng vào JavaScript trong quá trình build.
 
 Ví dụ:
 
-```powershell
-$env:NEXT_PUBLIC_API_URL = "http://xxx.xxx.x.xxx/api"
+Nếu build thủ công, đặt biến này thành địa chỉ API có thể truy cập được, bao
+gồm đường dẫn `/api/v1`:
 
+```powershell
+$env:NEXT_PUBLIC_BASE_URL = "http://172.23.19.13:5080/api/v1"
 npm run build
 ```
 

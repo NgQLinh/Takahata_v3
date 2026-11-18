@@ -8,9 +8,15 @@ Set-Location $projectRoot
 
 Write-Host "Installing dependencies..."
 npm ci
+if ($LASTEXITCODE -ne 0) {
+    throw "npm ci failed (exit code $LASTEXITCODE)."
+}
 
 Write-Host "Building Next.js application..."
 npm run build
+if ($LASTEXITCODE -ne 0) {
+    throw "Next.js build failed (exit code $LASTEXITCODE)."
+}
 
 Write-Host "Preparing deploy directory..."
 Remove-Item $deployPath -Recurse -Force -ErrorAction SilentlyContinue
@@ -30,10 +36,11 @@ Write-Host "Removing old ZIP file..."
 Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 
 Write-Host "Creating ZIP package..."
-Compress-Archive `
-    -Path (Join-Path $deployPath "*") `
-    -DestinationPath $zipPath `
-    -Force
+$deployEntries = @(Get-ChildItem -LiteralPath $deployPath -Force | ForEach-Object { $_.Name })
+tar.exe -a -c -f $zipPath -C $deployPath -- @deployEntries
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to create ZIP package with tar.exe (exit code $LASTEXITCODE)."
+}
 
 Write-Host "Deploy package created successfully:"
 Write-Host $deployPath

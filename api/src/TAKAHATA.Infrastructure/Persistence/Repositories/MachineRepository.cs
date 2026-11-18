@@ -693,6 +693,27 @@ namespace TAKAHATA.Infrastructure.Persistence.Repositories
                     && pp.Status == ProcessStatus.InProgress);
         }
 
+        public async Task<bool> HasActiveManufacturingOperationAsync(int machineId)
+        {
+            return await _dbContext.PartProcesses
+                .AnyAsync(process =>
+                    process.MachineId == machineId &&
+                    process.Part != null &&
+                    !process.Part.IsClosed &&
+                    (process.IsSettingUp ||
+                     (process.StartTime != null &&
+                      process.EndTime == null &&
+                      process.Status == ProcessStatus.InProgress)));
+        }
+
+        public async Task<bool> HasInProgressMaintenanceAsync(int machineId)
+        {
+            return await _dbContext.MachineMaintenanceProcesses
+                .AnyAsync(process =>
+                    process.MachineId == machineId &&
+                    process.Status == ProcessStatus.InProgress);
+        }
+
         public async Task<IEnumerable<int>> GetHasPlantMachine(List<int> machineIds)
         {
             var today = DateOnly.FromDateTime(DateTime.Now);

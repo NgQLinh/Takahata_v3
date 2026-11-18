@@ -482,8 +482,8 @@ export default function SettingsTab({ active }: Props) {
               <Button
                 icon={<ApiOutlined />}
                 loading={testingPLCConnection}
-                disabled={loading || saving}
-                onClick={handleTestPLCConnection}
+                disabled={loading || saving || testingPLCConnection}
+                onClick={() => void handleTestPLCConnection()}
               >
                 Kiểm tra kết nối PLC
               </Button>
@@ -492,6 +492,7 @@ export default function SettingsTab({ active }: Props) {
                 htmlType="submit"
                 icon={<SaveOutlined />}
                 loading={saving}
+                disabled={testingPLCConnection}
               >
                 Lưu cài đặt
               </Button>

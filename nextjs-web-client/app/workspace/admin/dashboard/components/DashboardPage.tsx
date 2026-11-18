@@ -59,7 +59,7 @@ export const statusConfig: Record<
   },
 
   [MachineStatus.Maintenance]: {
-    text: "REPAIR OR MAINTENANCE",
+    text: "MAINTENANCE",
     color: "#dc3545",
     foreground: "#fff",
     icon: "bi-tools",

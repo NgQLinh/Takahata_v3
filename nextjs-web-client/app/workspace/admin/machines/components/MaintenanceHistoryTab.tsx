@@ -232,6 +232,25 @@ export default function MaintenanceHistoryTab({ active }: Props) {
         render: (value) => value || "-",
       },
       {
+        title: "Thời gian bảo dưỡng (giờ)",
+        key: "actualDuration",
+        width: 220,
+        render: (_, process) => {
+          if (!process.startTime || !process.endTime) return "-";
+
+          const startTime = dayjs(process.startTime);
+          const endTime = dayjs(process.endTime);
+          const durationHours =
+            (endTime.valueOf() - startTime.valueOf()) / 3_600_000;
+
+          if (!startTime.isValid() || !endTime.isValid() || durationHours < 0) {
+            return "-";
+          }
+
+          return Math.round(durationHours * 100) / 100;
+        },
+      },
+      {
         title: "Trạng thái",
         dataIndex: "status",
         width: 150,

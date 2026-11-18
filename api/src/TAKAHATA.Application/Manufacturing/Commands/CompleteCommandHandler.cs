@@ -69,6 +69,9 @@ namespace TAKAHATA.Application.Manufacturing.Commands
                     return Errors.Machine.NotFound;
                 }
 
+                if (await _machineRepository.HasInProgressMaintenanceAsync(machineId))
+                    return Errors.Machine.MaintenanceInProgress;
+
                 if (await _partProcessRepository.IsCutoverLockedAsync(request.ProcessId))
                     return Errors.Part.ProcessCutoverLocked;
 

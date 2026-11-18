@@ -24,6 +24,16 @@ namespace TAKAHATA.Domain.Common.Errors
             public static Error IsProcessing =>
                 Error.Conflict(code: "Machine.IsProcessing", description: "Máy đang gia công chi tiết khác vui lòng kiểm tra lại.");
 
+            public static Error MaintenanceInProgress =>
+                Error.Conflict(
+                    code: "Machine.MaintenanceInProgress",
+                    description: "Máy đang được bảo trì. Vui lòng hoàn tất hoặc kết thúc trạng thái bảo trì để tiếp tục thao tác.");
+
+            public static Error ManufacturingInProgress =>
+                Error.Conflict(
+                    code: "Machine.ManufacturingInProgress",
+                    description: "Máy đang có kế hoạch gia công chưa hoàn tất. Vui lòng tạm dừng hoặc hoàn thành kế hoạch trước khi bảo trì.");
+
             public static Error IsProcessingPLC =>
                 Error.Conflict(code: "Machine.IsProcessingPLC", description: "Máy đang gia công vui lòng dừng máy trước khi thao tác.");
 

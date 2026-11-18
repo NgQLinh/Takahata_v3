@@ -108,26 +108,19 @@
 }
 
 .dashboard-machine-status-maintenance .dashboard-machine-status-button {
-  position: relative;
-  padding: 0.1rem 0.1rem 0.1rem 1.25em;
-  font-size: min(6cqi, 1.25rem);
-  letter-spacing: 0;
-  text-transform: none;
+  padding: 0.1rem;
+  font-size: clamp(0.6rem, 8cqi, 1.25rem);
 }
 
 .dashboard-maintenance-status-icon {
-  position: absolute;
-  bottom: 0.1em;
-  left: 0.25em;
-  font-size: 0.85em;
-  line-height: 1;
+  position: static;
 }
 
 .dashboard-maintenance-status-text {
   min-width: 0;
   flex: 0 1 auto;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.05;
 }
