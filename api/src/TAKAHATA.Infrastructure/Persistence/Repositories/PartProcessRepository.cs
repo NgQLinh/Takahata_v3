@@ -1209,6 +1209,15 @@ namespace TAKAHATA.Infrastructure.Persistence.Repositories
                                             : null
                                     : null;
 
+                    if (!startTime.HasValue &&
+                        !endTime.HasValue &&
+                        workingTime.GetValueOrDefault() <= 0 &&
+                        waitingTime.GetValueOrDefault() <= 0 &&
+                        setupTime.GetValueOrDefault() <= 0)
+                    {
+                        continue;
+                    }
+
                     dailyRows.Add(CreateDailyReportRow(
                         process,
                         date,

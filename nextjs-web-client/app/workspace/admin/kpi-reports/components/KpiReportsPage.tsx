@@ -160,7 +160,10 @@ type SummaryCard = {
   icon: ReactNode;
 };
 
-type MachinePeriodKPI = MachineKPI & { totalTime: number };
+type MachinePeriodKPI = MachineKPI & {
+  totalTime: number;
+  activeDayCount: number;
+};
 
 const formatHours = (value?: number | null, fractionDigits = 2) =>
   value == null ? "-" : `${value.toFixed(fractionDigits)} giờ`;
@@ -243,18 +246,21 @@ export function KpiReportsPage() {
     for (const machine of machinesKPI) {
       const key = machine.code || machine.name;
       const current = groupedMachines.get(key);
+      const dailyTotalTime = getMachineTotalTime(machine);
 
       if (!current) {
         groupedMachines.set(key, {
           ...machine,
-          totalTime: getMachineTotalTime(machine),
+          totalTime: dailyTotalTime,
+          activeDayCount: dailyTotalTime > 0 ? 1 : 0,
         });
         continue;
       }
 
       current.workingTime =
         (current.workingTime ?? 0) + (machine.workingTime ?? 0);
-      current.totalTime += getMachineTotalTime(machine);
+      current.totalTime += dailyTotalTime;
+      current.activeDayCount += dailyTotalTime > 0 ? 1 : 0;
       current.maintenanceTime =
         (current.maintenanceTime ?? 0) + (machine.maintenanceTime ?? 0);
       current.waitingTime =
@@ -290,7 +296,14 @@ export function KpiReportsPage() {
         name: machine.code || machine.name || "Máy",
         machineName: machine.name,
         totalTime: machine.totalTime,
-        utilization: Number(machine.utilizationRate.toFixed(1)),
+        utilization: Number(
+          (machine.activeDayCount > 0
+            ? (machine.totalTime /
+                (machine.activeDayCount * WORKING_HOURS_PER_DAY)) *
+              100
+            : 0
+          ).toFixed(1),
+        ),
         color: machineColors[machine.code || machine.name],
       }))
       .sort((left, right) => left.name.localeCompare(right.name));
@@ -807,8 +820,7 @@ export function KpiReportsPage() {
           workingTime +
           (record.setupTime ?? 0) +
           (record.waitingTime ?? 0);
-        const efficiency =
-          totalMachineTime > 0 ? workingTime / totalMachineTime : 0;
+        const efficiency = totalMachineTime / WORKING_HOURS_PER_DAY;
 
         return `${(efficiency * 100).toFixed(2)}%`;
       },
