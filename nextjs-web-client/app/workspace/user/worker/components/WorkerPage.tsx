@@ -264,9 +264,7 @@ export default function WorkerPage() {
 
   useEffect(() => {
     if (isMaintenanceProcess) {
-      maintenanceForm.setFieldsValue({
-        performedBy: selectedProcess?.performedBy ?? "",
-      });
+      maintenanceForm.setFieldsValue({ performedBy: "" });
     } else {
       maintenanceForm.resetFields();
     }
@@ -274,8 +272,20 @@ export default function WorkerPage() {
     isMaintenanceProcess,
     maintenanceForm,
     selectedProcess?.id,
-    selectedProcess?.performedBy,
   ]);
+
+  useEffect(() => {
+    const loggedInUserName =
+      typeof window !== "undefined"
+        ? localStorage.getItem("user_name")?.trim()
+        : undefined;
+
+    if (loggedInUserName) {
+      processingForm.setFieldsValue({
+        performedBy: loggedInUserName,
+      });
+    }
+  }, [processingForm, selectedProcess?.id]);
 
   // Ma trận trạng thái:
   // Planned -> được bắt đầu.
@@ -449,6 +459,13 @@ export default function WorkerPage() {
       await startAsync(request);
       await fetchManufacturingProcess();
       processingForm.resetFields();
+      const loggedInUserName =
+        typeof window !== "undefined"
+          ? localStorage.getItem("user_name")?.trim()
+          : undefined;
+      if (loggedInUserName) {
+        processingForm.setFieldsValue({ performedBy: loggedInUserName });
+      }
     } catch (error) {
       if (error instanceof ApiError) {
         toast.error(error.getDisplayMessage());
@@ -526,6 +543,19 @@ export default function WorkerPage() {
       return;
     }
 
+    if (
+      values.processedQuantity === undefined ||
+      values.processedQuantity === null
+    ) {
+      processingForm.setFields([
+        {
+          name: "processedQuantity",
+          errors: ["Nhập số lượng đã gia công"],
+        },
+      ]);
+      return;
+    }
+
     setProcessingAction("complete");
 
     try {
@@ -543,6 +573,13 @@ export default function WorkerPage() {
       await completeAsync(request);
       await fetchManufacturingProcess();
       processingForm.resetFields();
+      const loggedInUserName =
+        typeof window !== "undefined"
+          ? localStorage.getItem("user_name")?.trim()
+          : undefined;
+      if (loggedInUserName) {
+        processingForm.setFieldsValue({ performedBy: loggedInUserName });
+      }
     } catch (error) {
       if (error instanceof ApiError) {
         toast.error(error.getDisplayMessage());
@@ -1237,23 +1274,26 @@ export default function WorkerPage() {
                                 name="processedQuantity"
                                 rules={[
                                   {
-                                    required: true,
-                                    message: "Nhập số lượng đã gia công",
-                                  },
-                                  {
                                     validator: (_, value) => {
+                                      const remainingQuantity = Math.max(
+                                        0,
+                                        (selectedProcess?.quantity ?? 0) -
+                                          (selectedProcess?.totalProcessedQuantity ?? 0),
+                                      );
                                       if (
                                         value === undefined ||
                                         value === null ||
                                         !selectedProcess ||
-                                        value <= selectedProcess.quantity
+                                        (Number.isInteger(value) &&
+                                          value >= 0 &&
+                                          value <= remainingQuantity)
                                       ) {
                                         return Promise.resolve();
                                       }
 
                                       return Promise.reject(
                                         new Error(
-                                          `Số lượng đã gia công không được vượt quá ${selectedProcess.quantity}`,
+                                          `Số lượng nhập trong lần này không được vượt quá ${remainingQuantity}`,
                                         ),
                                       );
                                     },
@@ -1262,7 +1302,12 @@ export default function WorkerPage() {
                               >
                                 <InputNumber
                                   min={0}
-                                  max={selectedProcess?.quantity}
+                                  max={Math.max(
+                                    0,
+                                    (selectedProcess?.quantity ?? 0) -
+                                      (selectedProcess?.totalProcessedQuantity ?? 0),
+                                  )}
+                                  precision={0}
                                   className="w-100"
                                 />
                               </Form.Item>

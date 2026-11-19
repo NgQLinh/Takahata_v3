@@ -15,7 +15,6 @@ namespace TAKAHATA.Application.Manufacturing.Commands
         private readonly IMachineRepository _machineRepository;
         private readonly IPartProcessRepository _partProcessRepository;
         private readonly IPLCService _iPLCService;
-        private readonly IPartRepository _partRepository;
 
         private readonly ILogger<PauseCommandHandler> _logger;
 
@@ -23,13 +22,11 @@ namespace TAKAHATA.Application.Manufacturing.Commands
             IPartProcessRepository partProcessRepository,
             IMachineRepository machineRepository,
             IPLCService iPLCService,
-            IPartRepository partRepository,
             ILogger<PauseCommandHandler> logger)
         {
             _partProcessRepository = partProcessRepository;
             _machineRepository = machineRepository;
             _iPLCService = iPLCService;
-            _partRepository = partRepository;
             _logger = logger;
         }
 
@@ -99,34 +96,6 @@ namespace TAKAHATA.Application.Manufacturing.Commands
                     return Errors.Part.NotFoundProcess;
                 }
 
-                var part = await _partRepository.GetByIdAsync(request.PartId);
-                if (part == null)
-                {
-                    _logger.LogWarning(
-                        "Không tìm thấy Part. PartId={PartId}",
-                        request.PartId);
-
-                    return Errors.Part.NotFound;
-                }
-
-                var processedQuantity =
-                    await _partProcessRepository.GetProcessedQuantityByReferenceId(
-                        partProcess.ReferenceId ?? partProcess.Id);
-
-                if (processedQuantity + request.ProcessedQuantity > part.Quantity)
-                {
-                    _logger.LogWarning(
-                        """
-                        Số lượng gia công không hợp lệ.
-                        ProcessedQuantity={ProcessedQuantity},
-                        PartQuantity={PartQuantity}
-                        """,
-                        processedQuantity + request.ProcessedQuantity,
-                        part.Quantity);
-
-                    return Errors.Part.IncorrectQuantity;
-                }
-
                 partProcess.Status = ProcessStatus.Paused;
 
                 _logger.LogInformation(
@@ -144,12 +113,6 @@ namespace TAKAHATA.Application.Manufacturing.Commands
 
                 partProcess.PendingEndTime = DateTime.Now;
                 partProcess.EndTime = null;
-
-                // Nếu số lượng > kế hoạch tự động set bằng.
-                partProcess.ProcessedQuantity += request.ProcessedQuantity;
-
-                if (partProcess.ProcessedQuantity > part.Quantity)
-                    partProcess.ProcessedQuantity = part.Quantity;
 
                 partProcess.PerformedBy = request.PerformedBy;
 

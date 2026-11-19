@@ -139,7 +139,8 @@ namespace TAKAHATA.Application.Manufacturing.Commands
                         return Errors.Part.NotFoundProcess;
                     }
 
-                    if (request.ProcessedQuantity > part.Quantity)
+                    if (request.ProcessedQuantity < 0 ||
+                        request.ProcessedQuantity > part.Quantity)
                     {
                         _logger.LogWarning(
                             """

@@ -35,6 +35,7 @@ export default function LoginPage() {
 
         localStorage.setItem("access_token", res.accessToken);
         localStorage.setItem("refresh_token", res.refreshToken);
+        localStorage.setItem("user_name", values.userName.trim());
 
         if (!res.roles) return;
 
