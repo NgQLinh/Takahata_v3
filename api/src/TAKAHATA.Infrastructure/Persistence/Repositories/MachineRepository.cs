@@ -614,7 +614,7 @@ namespace TAKAHATA.Infrastructure.Persistence.Repositories
                         dayEnd,
                         now);
                     dailyTimeSummaries.TryGetValue((machine.Id, date), out var dailySummary);
-                    if (dailySummary is not null)
+                    if (dailySummary is not null && dailySummary.WorkingTime > 0)
                         workingTime = dailySummary.WorkingTime;
 
                     result.Add(new MachineKPIResponse
